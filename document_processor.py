@@ -3,52 +3,55 @@ from pypdf import PdfReader
 
 def process_documents(documents_folder):
     """
-    Process all PDF documents in a folder and return chunks.
+    Simple and fast document processing function.
     
     Args:
-        documents_folder (str): Folder containing PDF documents
+        documents_folder: Folder containing PDF documents
         
     Returns:
-        list: List of text chunks from all documents
+        list: List of text chunks
     """
     all_chunks = []
     
+    # Check if folder exists
     if not os.path.exists(documents_folder):
-        print(f"Documents folder {documents_folder} does not exist.")
+        print(f"Documents folder {documents_folder} does not exist")
         return all_chunks
     
+    # Process each PDF file
     for filename in os.listdir(documents_folder):
         if filename.endswith('.pdf'):
-            file_path = os.path.join(documents_folder, filename)
             print(f"Processing {filename}...")
+            file_path = os.path.join(documents_folder, filename)
             
             try:
-                # Extract text from PDF - limit to 10 pages for speed
-                pdf_reader = PdfReader(file_path)
+                # Simple text extraction
+                pdf = PdfReader(file_path)
                 text = ""
                 
-                # Process only first 10 pages for speed
-                pages_to_process = min(len(pdf_reader.pages), 10)
+                # Extract text from each page
+                for page in pdf.pages:
+                    text += page.extract_text() + "\n"
                 
-                for i in range(pages_to_process):
-                    page_text = pdf_reader.pages[i].extract_text() or ""
-                    text += page_text + "\n"
+                # Simple chunking - break by paragraphs first, then by size if needed
+                paragraphs = text.split('\n\n')
                 
-                # Split into simple chunks of 1000 characters
-                if text:
-                    # Very simple chunking - just break into 1000 character pieces
-                    chunk_size = 1000
-                    for i in range(0, len(text), chunk_size):
-                        chunk = text[i:i+chunk_size].strip()
-                        if chunk:
-                            all_chunks.append(chunk)
-                    
-                    print(f"Extracted chunks from {filename}")
-                else:
-                    print(f"No text extracted from {filename}")
-                    
+                for para in paragraphs:
+                    if para.strip():  # Skip empty paragraphs
+                        # If paragraph is too large, break it into smaller chunks
+                        if len(para) > 1000:
+                            for i in range(0, len(para), 1000):
+                                chunk = para[i:i+1000].strip()
+                                if chunk:
+                                    all_chunks.append(chunk)
+                        else:
+                            all_chunks.append(para.strip())
+                
+                print(f"Extracted {len(paragraphs)} paragraphs from {filename}")
+                
             except Exception as e:
                 print(f"Error processing {filename}: {str(e)}")
                 continue
     
+    print(f"Total chunks extracted: {len(all_chunks)}")
     return all_chunks
