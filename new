@@ -1,0 +1,547 @@
+import streamlit as st
+import pandas as pd
+import os
+from io import BytesIO
+import base64
+import zipfile
+import time
+import uuid
+import sys
+
+from pdf_processor import process_pdf_with_enhanced_protection, display_pdf_file, generate_preview, display_pdf_preview
+from scanned_files import detect_scanned_pdf, process_scanned_pdf
+from reset import check_for_reset_flag, clear_uploads
+
+def process_single_pdf(pdf, words_to_replace, pdf_path, tabs, idx):
+    """Helper function to process a single PDF and update UI"""
+    # Switch to the tab of the current PDF
+    with tabs[idx]:
+        # Create progress indicator
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # Show original document preview
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("### 📄 Original PDF")
+            
+            # Generate preview and show document
+            status_text.text("Generating preview...")
+            file_size_mb = os.path.getsize(pdf_path) / (1024 * 1024)
+            if file_size_mb > 10:
+                st.warning(f"Large PDF ({file_size_mb:.1f} MB). Showing preview of first few pages only.")
+                # For large files, only show first 5 pages for faster loading
+                preview_bytes = generate_preview(pdf_path, max_pages=5)
+                pdf_html = display_pdf_preview(preview_bytes)
+                st.markdown(pdf_html, unsafe_allow_html=True)
+            else:
+                display_pdf_file(pdf_path)
+        
+        # Define output path
+        output_pdf_path = pdf_path.replace(".pdf", "_masked.pdf")
+        
+        # Process document with progress updates
+        status_text.text("Checking document type...")
+        progress_bar.progress(10)
+        
+        # Check if this is a scanned PDF - always enabled but hidden from UI
+        is_scanned = detect_scanned_pdf(pdf_path)
+        if is_scanned:
+            status_text.text("Detected scanned PDF. Using optimized processing...")
+            progress_bar.progress(25)
+            
+            # Process scanned PDF with special handling
+            start_time = time.time()
+            log_data = process_scanned_pdf(
+                pdf_path, 
+                words_to_replace, 
+                output_pdf_path,
+                remove_logos=st.session_state.remove_logos,
+                add_watermarks=st.session_state.add_watermarks
+            )
+            processing_time = time.time() - start_time
+        else:
+            status_text.text("Processing document...")
+            progress_bar.progress(25)
+            
+            # Process PDF with enhanced protection
+            start_time = time.time()
+            log_data = process_pdf_with_enhanced_protection(
+                pdf_path, 
+                words_to_replace, 
+                output_pdf_path, 
+                remove_logos=st.session_state.remove_logos,
+                add_watermarks=st.session_state.add_watermarks
+            )
+            processing_time = time.time() - start_time
+        
+        progress_bar.progress(75)
+        
+        # Track processed files in session state
+        if 'processed_info' not in st.session_state:
+            st.session_state.processed_info = {}
+        
+        st.session_state.processed_info[pdf.name] = {
+            'path': output_pdf_path,
+            'log': log_data
+        }
+        
+        # Show processed document preview
+        with col2:
+            st.markdown("### 🔒 Processed PDF")
+            status_text.text("Generating processed preview...")
+            display_pdf_file(output_pdf_path)
+        
+        # Update progress and status
+        progress_bar.progress(100)
+        status_text.text(f"Processing complete in {processing_time:.2f} seconds")
+        
+        # Download buttons
+        st.markdown("### 📥 Download Options")
+        col_download1, col_download2 = st.columns(2)
+        
+        with col_download1:
+            with open(output_pdf_path, "rb") as f:
+                st.download_button(
+                    "🔒 Download Processed PDF", 
+                    f, 
+                    file_name=f"masked_{pdf.name}",
+                    mime="application/pdf",
+                    key=f"download_processed_{pdf.name}_{idx}_{uuid.uuid4()}",
+                    use_container_width=True
+                )
+        
+        # Professional log display (with limit to avoid overloading UI)
+        if log_data:
+            st.markdown("### 📋 Processing Log")
+            with st.expander("View Processing Details"):
+                st.markdown('<div class="log-container">', unsafe_allow_html=True)
+                # Show only the most important logs (limit to 50)
+                displayed_logs = log_data if len(log_data) < 50 else log_data[:50]
+                for entry in displayed_logs:
+                    st.markdown(f'<div class="log-entry">{entry}</div>', unsafe_allow_html=True)
+                if len(log_data) > 50:
+                    st.markdown(f'<div class="log-entry">...and {len(log_data) - 50} more entries</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+    
+    return output_pdf_path, log_data
+
+def main():
+    # Check for reset flag first
+    check_for_reset_flag()
+    
+    # Set a unique run ID if not already present
+    if "run_id" not in st.session_state:
+        st.session_state.run_id = str(uuid.uuid4())
+    
+    # Initialize process flags if not already present
+    if 'process_all' not in st.session_state:
+        st.session_state.process_all = False
+    
+    # Initialize session state for tracking processed files
+    if 'processed_files' not in st.session_state:
+        st.session_state.processed_files = []
+    
+    # Initialize per-file words to mask in session state if not already there
+    if 'file_words_to_mask' not in st.session_state:
+        st.session_state.file_words_to_mask = {}
+    
+    # Initialize current file to process in session state
+    if 'current_file' not in st.session_state:
+        st.session_state.current_file = None
+    
+    # Page configuration
+    st.set_page_config(
+        page_title="Data Shield Platform", 
+        page_icon="🔒", 
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Load custom CSS
+    with open("style.css") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    
+    # Title and Description
+    st.markdown("""
+    <div class="title-container">
+        <h1>🔒 Data Shield Platform</h1>
+        <p>Protect sensitive information by removing confidential text and logos from your documents.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Main content and sidebar setup
+    main_content = st.container()
+    
+    # Helper functions for word list management
+    def add_word():
+        if st.session_state.current_file and st.session_state.new_word:
+            # Initialize list for current file if needed
+            if st.session_state.current_file not in st.session_state.file_words_to_mask:
+                st.session_state.file_words_to_mask[st.session_state.current_file] = []
+                
+            # Add word if not already in list
+            if st.session_state.new_word not in st.session_state.file_words_to_mask[st.session_state.current_file]:
+                st.session_state.file_words_to_mask[st.session_state.current_file].append(st.session_state.new_word)
+                st.session_state.new_word = ""
+    
+    def clear_words():
+        if st.session_state.current_file:
+            st.session_state.file_words_to_mask[st.session_state.current_file] = []
+    
+    # Sidebar Processing Options
+    with st.sidebar:
+        st.header("🛡️ PDF Processing")
+        
+        # Use the run_id to ensure unique widget IDs
+        run_id = st.session_state.run_id
+        
+        # File Uploader for PDFs
+        uploaded_pdfs = st.file_uploader(
+            "Upload PDFs", 
+            type=["pdf"], 
+            accept_multiple_files=True,
+            key=f"pdf_uploader_{run_id}",
+            help="Select one or more PDFs to process"
+        )
+        
+        # Store the PDFs in session state to ensure they're cleared on reload
+        if uploaded_pdfs is not None:
+            st.session_state.uploaded_pdfs = uploaded_pdfs
+            
+            # Only try to access elements if the list is not empty
+            if len(uploaded_pdfs) > 0:
+                # If there's just one PDF, make it the current file
+                if len(uploaded_pdfs) == 1:
+                    st.session_state.current_file = uploaded_pdfs[0].name
+                # If there are multiple PDFs and no current file is selected, select the first one
+                elif len(uploaded_pdfs) > 1 and not st.session_state.current_file:
+                    st.session_state.current_file = uploaded_pdfs[0].name
+                # If the current file is no longer in the uploaded PDFs, reset it
+                elif st.session_state.current_file not in [pdf.name for pdf in uploaded_pdfs]:
+                    st.session_state.current_file = uploaded_pdfs[0].name
+            else:
+                # If uploaded_pdfs is empty, make sure current_file is None
+                st.session_state.current_file = None
+        
+        # File selection dropdown if multiple PDFs are uploaded
+        if uploaded_pdfs and len(uploaded_pdfs) > 1:
+            st.subheader("Select File to Add Words")
+            file_options = [pdf.name for pdf in uploaded_pdfs]
+            
+            # Find current index in options
+            current_index = 0
+            if st.session_state.current_file in file_options:
+                current_index = file_options.index(st.session_state.current_file)
+            
+            selected_file = st.selectbox(
+                "Choose a PDF:",
+                options=file_options,
+                index=current_index,
+                key="file_selector"
+            )
+            
+            # Update current file when selection changes
+            if selected_file != st.session_state.current_file:
+                st.session_state.current_file = selected_file
+                # We need to rerun to update the word list display
+                st.rerun()
+        
+        # Word entry section - now displays words only for the selected PDF
+        if uploaded_pdfs and len(uploaded_pdfs) > 0 and st.session_state.current_file:
+            # Initialize word list for current file if needed
+            if st.session_state.current_file not in st.session_state.file_words_to_mask:
+                st.session_state.file_words_to_mask[st.session_state.current_file] = []
+                
+            current_words = st.session_state.file_words_to_mask[st.session_state.current_file]
+            
+            st.subheader(f"📝 Words to Mask for {st.session_state.current_file}")
+            
+            # Option to enter words directly
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.text_input(
+                    "Enter word or phrase:", 
+                    key="new_word",
+                    on_change=add_word,
+                    placeholder="Enter text and press Enter"
+                )
+            with col2:
+                st.button("Add", on_click=add_word, use_container_width=True)
+            
+            # Display current list of words to mask for this file
+            if current_words:
+                st.markdown("#### Current words to mask:")
+                
+                # Create a container for the words with delete buttons
+                word_list = st.container()
+                
+                with word_list:
+                    for i, word in enumerate(current_words):
+                        col1, col2 = st.columns([4, 1])
+                        with col1:
+                            st.markdown(f"• {word}")
+                        with col2:
+                            if st.button("🗑️", key=f"delete_{i}", help=f"Remove '{word}'"):
+                                st.session_state.file_words_to_mask[st.session_state.current_file].pop(i)
+                                st.rerun()
+                
+                # Button to clear all words
+                st.button("Clear All Words", on_click=clear_words)
+                
+            else:
+                st.info("No words added yet. Enter words above to mask them in this document.")
+        
+        # Processing Options
+        st.subheader("⚙️ Options")
+        
+        # Use the run_id to ensure unique checkbox IDs
+        if 'remove_logos' not in st.session_state:
+            st.session_state.remove_logos = True
+        
+        remove_logos = st.checkbox(
+            "Remove Logos", 
+            value=st.session_state.remove_logos,
+            key=f"remove_logos_{run_id}",
+            help="Detect and remove logo images from documents"
+        )
+        # Update session state when the checkbox is changed
+        st.session_state.remove_logos = remove_logos
+        
+        if 'add_watermarks' not in st.session_state:
+            st.session_state.add_watermarks = True
+            
+        add_watermarks = st.checkbox(
+            "Add Logo Placeholders", 
+            value=st.session_state.add_watermarks,
+            key=f"add_watermarks_{run_id}",
+            help="Add light purple indicators showing where logos were originally present"
+        )
+        # Update session state when the checkbox is changed
+        st.session_state.add_watermarks = add_watermarks
+        
+        # Hidden option - always set to true but not shown in sidebar
+        if 'handle_scanned_pdfs' not in st.session_state:
+            st.session_state.handle_scanned_pdfs = True
+        
+        # Process button
+        has_words_to_mask = False
+        pdfs_with_words = []
+        
+        # Check which PDFs have words to mask
+        if uploaded_pdfs and len(uploaded_pdfs) > 0:
+            for pdf in uploaded_pdfs:
+                if pdf.name in st.session_state.file_words_to_mask and len(st.session_state.file_words_to_mask[pdf.name]) > 0:
+                    has_words_to_mask = True
+                    pdfs_with_words.append(pdf.name)
+        
+        if uploaded_pdfs and len(uploaded_pdfs) > 0 and has_words_to_mask:
+            st.button(
+                "🚀 Process All PDFs", 
+                key=f"process_all_button_{run_id}",
+                on_click=lambda: st.session_state.update({"process_all": True}),
+                use_container_width=True
+            )
+            
+            if pdfs_with_words:
+                st.info(f"The following PDFs will be processed: {', '.join(pdfs_with_words)}")
+        else:
+            if not uploaded_pdfs or len(uploaded_pdfs) == 0:
+                st.info("Upload PDFs to continue")
+            elif not has_words_to_mask:
+                st.info("Add words to mask for at least one PDF before processing")
+        
+        # Add some space
+        st.markdown("###")
+        
+        # Reset button
+        st.markdown('<div class="reset-button">', unsafe_allow_html=True)
+        if st.button("🔄 Reset", key=f"reset_button_{run_id}", use_container_width=True):
+            # Clear words list
+            st.session_state.file_words_to_mask = {}
+            st.session_state.current_file = None
+            clear_uploads()
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Main processing logic
+    with main_content:
+        if uploaded_pdfs and len(uploaded_pdfs) > 0:
+            # Create tabs for multiple PDFs
+            tab_labels = [f"PDF {i+1}: {os.path.basename(pdf.name)}" for i, pdf in enumerate(uploaded_pdfs)]
+            tabs = st.tabs(tab_labels)
+            
+            # Find currently selected PDF
+            current_pdf = None
+            current_idx = 0
+            for idx, pdf in enumerate(uploaded_pdfs):
+                if pdf.name == st.session_state.current_file:
+                    current_pdf = pdf
+                    current_idx = idx
+                    break
+            
+            # Save all PDFs to disk to ensure they are available
+            for pdf in uploaded_pdfs:
+                pdf_path = os.path.join("downloads", pdf.name)
+                if not os.path.exists(pdf_path):
+                    with open(pdf_path, "wb") as f:
+                        f.write(pdf.getvalue())
+            
+            # Show all PDFs in their tabs - this ensures all tabs show content
+            for idx, pdf in enumerate(uploaded_pdfs):
+                pdf_path = os.path.join("downloads", pdf.name)
+                
+                # Check if this PDF has been processed
+                processed = 'processed_info' in st.session_state and pdf.name in st.session_state.processed_info
+                
+                if processed:
+                    # Show the processed version with original side by side
+                    with tabs[idx]:
+                        processed_data = st.session_state.processed_info[pdf.name]
+                        output_path = processed_data['path']
+                        log_data = processed_data['log']
+                        
+                        # Show original and processed previews side by side
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("### 📄 Original PDF")
+                            display_pdf_file(pdf_path)
+                        
+                        with col2:
+                            st.markdown("### 🔒 Processed PDF")
+                            display_pdf_file(output_path)
+                        
+                        # Download button
+                        st.markdown("### 📥 Download Options")
+                        with open(output_path, "rb") as f:
+                            st.download_button(
+                                "🔒 Download Processed PDF", 
+                                f, 
+                                file_name=f"masked_{pdf.name}",
+                                mime="application/pdf",
+                                key=f"download_tab_{pdf.name}_{idx}_{run_id}",
+                                use_container_width=True
+                            )
+                        
+                        # Show log data
+                        if log_data:
+                            st.markdown("### 📋 Processing Log")
+                            with st.expander("View Processing Details"):
+                                st.markdown('<div class="log-container">', unsafe_allow_html=True)
+                                displayed_logs = log_data if len(log_data) < 50 else log_data[:50]
+                                for entry in displayed_logs:
+                                    st.markdown(f'<div class="log-entry">{entry}</div>', unsafe_allow_html=True)
+                                if len(log_data) > 50:
+                                    st.markdown(f'<div class="log-entry">...and {len(log_data) - 50} more entries</div>', unsafe_allow_html=True)
+                                st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    # Show the unprocessed preview
+                    with tabs[idx]:
+                        # Display the PDF preview
+                        st.markdown("### 📄 PDF Preview")
+                        file_size_mb = os.path.getsize(pdf_path) / (1024 * 1024)
+                        if file_size_mb > 10:
+                            st.warning(f"Large PDF ({file_size_mb:.1f} MB). Showing preview of first few pages only.")
+                            preview_bytes = generate_preview(pdf_path, max_pages=5)
+                            pdf_html = display_pdf_preview(preview_bytes)
+                            st.markdown(pdf_html, unsafe_allow_html=True)
+                        else:
+                            display_pdf_file(pdf_path)
+                        
+                        # Add instructions
+                        has_words = pdf.name in st.session_state.file_words_to_mask and len(st.session_state.file_words_to_mask[pdf.name]) > 0
+                        if has_words:
+                            word_list = ", ".join([f'"{word}"' for word in st.session_state.file_words_to_mask[pdf.name]])
+                            st.info(f"Words to mask: {word_list}")
+                        else:
+                            st.info(f"Select this PDF in the dropdown to add words to mask.")
+            
+            # Process all PDFs when the button is clicked
+            if 'process_all' in st.session_state and st.session_state.process_all:
+                st.session_state.process_all = False  # Reset the flag
+                
+                # Create a progress tracking container
+                batch_progress = st.container()
+                with batch_progress:
+                    st.markdown("### 🔄 Processing All PDFs")
+                    overall_progress = st.progress(0)
+                    status_text = st.empty()
+                    
+                    # Count PDFs with words to process
+                    pdfs_to_process = []
+                    for pdf in uploaded_pdfs:
+                        if pdf.name in st.session_state.file_words_to_mask and len(st.session_state.file_words_to_mask[pdf.name]) > 0:
+                            pdfs_to_process.append(pdf)
+                    
+                    status_text.text(f"Found {len(pdfs_to_process)} PDFs to process")
+                    
+                    # Process each PDF with words
+                    pdfs_processed = 0
+                    for idx, pdf in enumerate(pdfs_to_process):
+                        # Get the tab index for this PDF
+                        tab_idx = next((i for i, p in enumerate(uploaded_pdfs) if p.name == pdf.name), 0)
+                        
+                        status_text.text(f"Processing {pdf.name} ({idx+1}/{len(pdfs_to_process)})")
+                        words_to_replace = st.session_state.file_words_to_mask[pdf.name]
+                        pdf_path = os.path.join("downloads", pdf.name)
+                        
+                        try:
+                            # Process the PDF
+                            process_single_pdf(pdf, words_to_replace, pdf_path, tabs, tab_idx)
+                            pdfs_processed += 1
+                            
+                            # Update overall progress
+                            progress_percentage = (idx + 1) / len(pdfs_to_process)
+                            overall_progress.progress(progress_percentage)
+                        except Exception as e:
+                            st.error(f"Error processing {pdf.name}: {str(e)}")
+                    
+                    # Complete the process
+                    if pdfs_processed > 0:
+                        status_text.text(f"Processing complete! {pdfs_processed} PDF(s) processed successfully.")
+                    else:
+                        status_text.warning("No PDFs were processed. Make sure to add words to mask for each PDF you want to process.")
+                    overall_progress.progress(1.0)
+                    
+                    # Rerun to update the interface with processed PDFs
+                    st.rerun()
+                    
+            # Bulk download for multiple processed PDFs
+            if 'processed_info' in st.session_state and len(st.session_state.processed_info) > 1:
+                st.markdown("### 📦 Batch Download")
+                # Create ZIP of processed files
+                processed_paths = [info['path'] for info in st.session_state.processed_info.values()]
+                zip_path = os.path.join("downloads", "masked_pdfs.zip")
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for processed_file in processed_paths:
+                        zipf.write(processed_file, os.path.basename(processed_file))
+                
+                # Bulk download button
+                with open(zip_path, "rb") as f:
+                    st.download_button(
+                        "📦 Download All Processed PDFs as ZIP", 
+                        f, 
+                        file_name="masked_pdfs.zip", 
+                        mime="application/zip",
+                        key=f"bulk_download_zip_{run_id}",
+                        use_container_width=True
+                    )
+        else:
+            # Show guidance if no PDFs are uploaded
+            st.info("👈 Upload PDF documents from the sidebar to get started.")
+
+if __name__ == "__main__":
+    # Ensure downloads directory exists
+    os.makedirs("downloads", exist_ok=True)
+    
+    # Add query parameters to URL to help with cache busting
+    query_params = st.query_params
+    if "reload" in query_params:
+        # This is a reload request, make sure we have a fresh session
+        for key in list(st.session_state.keys()):
+            # Keep only essential state if needed
+            if key not in ["run_id"]:
+                del st.session_state[key]
+    
+    # Run the application
+    main()
