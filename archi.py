@@ -97,12 +97,27 @@ color_labels = ["Database", "API Gateway", "Services", "User", "Storage", "Messa
 color_defaults = ["#F94144", "#F3722C", "#43AA8B", "#577590", "#F9C74F", "#9F86C0"]
 color_settings = {}
 
-# Simple approach - just use Streamlit's built-in layout
-# This will create a single column of color pickers which is what appears in the image
-for i, (label, default) in enumerate(zip(color_labels, color_defaults)):
-    color_settings[label] = st.sidebar.color_picker(
-        label, default, key=f"color_{i}"
-    )
+# Create a 2-row layout using columns
+col1, col2, col3 = st.sidebar.columns(3)
+columns = [col1, col2, col3]
+
+# First row
+for i in range(3):
+    with columns[i]:
+        color_settings[color_labels[i]] = st.color_picker(
+            color_labels[i], color_defaults[i], key=f"color_{i}"
+        )
+
+# Second row
+col4, col5, col6 = st.sidebar.columns(3)
+columns = [col4, col5, col6]
+
+# Second row
+for i in range(3, 6):
+    with columns[i-3]:
+        color_settings[color_labels[i]] = st.color_picker(
+            color_labels[i], color_defaults[i], key=f"color_{i}"
+        )
 
 # Prompt templates
 st.sidebar.header("📋 Prompt Templates")
@@ -178,7 +193,7 @@ if trigger:
             }
             
             color_comment = "\n".join([f"Use color {color} for {label}" for label, color in color_settings.items()])
-            full_prompt = final_prompt + "\n\n" + color_comment + "\n\nEnsure the diagram syntax is fully compatible with Mermaid version 11.5.0. Use simple flowchart format if unsure."
+            full_prompt = final_prompt + "\n\n" + color_comment + "\n\nEnsure the diagram syntax is fully compatible with Mermaid version 9.4.3 (NOT 11.5.0). Use only simple flowchart format (flowchart TD or LR) to avoid syntax errors."
             
             payload = {
                 "model": model_id,
@@ -187,8 +202,10 @@ if trigger:
                         "role": "system",
                         "content": (
                             "You are an expert system designer. Based on the user's prompt or uploaded requirements, "
-                            "generate a valid and compatible mermaid.js diagram using Mermaid version 11.5.0 syntax. "
-                            "Ensure it visually represents the architecture clearly and use styling based on user-provided color hints."
+                            "generate a valid and compatible mermaid.js diagram using Mermaid version 9.4.3 syntax (NOT 11.5.0). "
+                            "IMPORTANT: Use only simple flowchart format (flowchart TD or LR) to avoid syntax errors. "
+                            "Ensure it visually represents the architecture clearly and use styling based on user-provided color hints. "
+                            "Do not use advanced Mermaid features that may cause compatibility issues."
                         )
                     },
                     {"role": "user", "content": full_prompt}
