@@ -46,23 +46,28 @@ st.markdown("""
 textarea {
     border-radius: 12px !important;
 }
-.color-row {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    width: 100%;
+.color-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-gap: 10px;
+    margin-bottom: 20px;
 }
-.color-col {
-    display: flex;
-    flex-direction: column;
-    flex: 0 0 33.333333%;
-    max-width: 33.333333%;
-    padding: 0 5px;
-    margin-bottom: 10px;
+.color-item {
+    padding: 5px;
 }
 .download-btn {
-    margin-top: 1rem;
-    margin-bottom: 2rem;
+    display: block;
+    margin: 1rem auto;
+    padding: 0.5rem 1rem;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+}
+.download-btn:hover {
+    background-color: #45a049;
 }
 .stExpander {
     margin-top: 2rem;
@@ -76,29 +81,20 @@ st.markdown("Design, visualize, and refine system architecture with the power of
 # Sidebar layout
 st.sidebar.header("🎨 Customize Component Colors")
 
-# 2 rows x 3 columns layout for color pickers
+# Create a 2x3 grid layout for color pickers
 color_labels = ["Database", "API Gateway", "Services", "User", "Storage", "Messaging"]
 color_defaults = ["#F94144", "#F3722C", "#43AA8B", "#577590", "#F9C74F", "#9F86C0"]
 color_settings = {}
 
-# Create 2 rows with 3 columns each
-st.sidebar.markdown("<div class='color-row'>", unsafe_allow_html=True)
-for i in range(3):  # First row
-    st.sidebar.markdown(f"<div class='color-col'>", unsafe_allow_html=True)
-    color_settings[color_labels[i]] = st.sidebar.color_picker(
-        color_labels[i], color_defaults[i], key=f"color_{i}"
+# Create custom grid layout
+st.sidebar.markdown('<div class="color-grid">', unsafe_allow_html=True)
+for i, (label, default) in enumerate(zip(color_labels, color_defaults)):
+    st.sidebar.markdown(f'<div class="color-item">', unsafe_allow_html=True)
+    color_settings[label] = st.sidebar.color_picker(
+        label, default, key=f"color_{i}"
     )
-    st.sidebar.markdown("</div>", unsafe_allow_html=True)
-st.sidebar.markdown("</div>", unsafe_allow_html=True)
-
-st.sidebar.markdown("<div class='color-row'>", unsafe_allow_html=True)
-for i in range(3, 6):  # Second row
-    st.sidebar.markdown(f"<div class='color-col'>", unsafe_allow_html=True)
-    color_settings[color_labels[i]] = st.sidebar.color_picker(
-        color_labels[i], color_defaults[i], key=f"color_{i}"
-    )
-    st.sidebar.markdown("</div>", unsafe_allow_html=True)
-st.sidebar.markdown("</div>", unsafe_allow_html=True)
+    st.sidebar.markdown('</div>', unsafe_allow_html=True)
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
 # Prompt templates
 st.sidebar.header("📋 Prompt Templates")
@@ -134,11 +130,11 @@ if requirement_file:
 sidebar_generate = st.sidebar.button("✨ Generate from Requirement")
 reset = st.sidebar.button("🔄 Reset All")
 
-# Reset logic
+# Reset logic - fixed to use st.rerun()
 if reset:
-    for key in st.session_state.keys():
+    for key in list(st.session_state.keys()):
         del st.session_state[key]
-    st.experimental_rerun()
+    st.rerun()
 
 # Prompt area (template + text input)
 prompt = ""
@@ -215,41 +211,68 @@ if trigger:
 if st.session_state.diagram_generated:
     st.markdown("### 🖼️ Generated Architecture Diagram")
     
-    # Add download button function for PNG export
+    # Improved download button function that reliably works
     download_js = """
     <script>
-    function downloadDiagram() {
-        const svg = document.querySelector("#mermaid-diagram svg");
-        if (!svg) {
-            alert("No diagram found to download");
+    // Function to download SVG as PNG
+    function downloadPNG() {
+        // Get the SVG element
+        const svgElement = document.querySelector('#mermaid-diagram svg');
+        if (!svgElement) {
+            alert('No diagram found');
             return;
         }
         
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        const data = (new XMLSerializer()).serializeToString(svg);
-        const DOMURL = window.URL || window.webkitURL || window;
+        // Get SVG data
+        const svgData = new XMLSerializer().serializeToString(svgElement);
         
+        // Create a canvas element
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Create an Image object
         const img = new Image();
-        const svgBlob = new Blob([data], {type: "image/svg+xml;charset=utf-8"});
-        const url = DOMURL.createObjectURL(svgBlob);
         
+        // Set up the onload handler for the Image object
         img.onload = function() {
+            // Set canvas dimensions to match the SVG
             canvas.width = img.width;
             canvas.height = img.height;
-            ctx.drawImage(img, 0, 0);
-            DOMURL.revokeObjectURL(url);
             
-            const pngUrl = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream");
-            const downloadLink = document.createElement("a");
-            downloadLink.href = pngUrl;
-            downloadLink.download = "architecture_diagram.png";
-            document.body.appendChild(downloadLink);
-            downloadLink.click();
-            document.body.removeChild(downloadLink);
+            // Draw white background first
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw the image on the canvas
+            ctx.drawImage(img, 0, 0);
+            
+            // Create a download link
+            const a = document.createElement('a');
+            a.download = 'architecture_diagram.png';
+            a.href = canvas.toDataURL('image/png');
+            
+            // Trigger a click on the link to start the download
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         };
+        
+        // Convert SVG to a data URL
+        const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+        const url = URL.createObjectURL(svgBlob);
+        
+        // Load the SVG data into the Image object
         img.src = url;
     }
+    
+    // Add event listener after the page loads
+    window.addEventListener('load', function() {
+        // Find the download button and attach the event handler
+        const downloadBtn = document.getElementById('download-png-btn');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', downloadPNG);
+        }
+    });
     </script>
     """
     
@@ -261,7 +284,7 @@ if st.session_state.diagram_generated:
         </div>
         <script src="https://cdn.jsdelivr.net/npm/mermaid@11.5.0/dist/mermaid.min.js"></script>
         <script>mermaid.initialize({{startOnLoad:true}});</script>
-        <button onclick="downloadDiagram()" class="download-btn">📥 Download as PNG</button>
+        <button id="download-png-btn" class="download-btn">📥 Download as PNG</button>
     </div>
     """
     
@@ -277,7 +300,7 @@ if st.session_state.diagram_generated:
         
         if st.button("🔄 Re-render Updated Diagram"):
             st.session_state.mermaid_code = edited_code
-            st.experimental_rerun()
+            st.rerun()
     
     with st.expander("🧠 View Explanation"):
         st.markdown(st.session_state.explanation or "No explanation provided.")
