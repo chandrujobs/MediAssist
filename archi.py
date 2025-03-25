@@ -38,10 +38,20 @@ st.markdown("""
     background-color: #ffffff;
     border-radius: 16px;
     padding: 2rem;
-    margin-bottom: 2rem;
+    margin-bottom: 3rem;
     box-shadow: 0 0 20px rgba(0,0,0,0.05);
     width: 100%;
     overflow: auto;
+    min-height: 500px;
+}
+.diagram-wrapper {
+    margin-bottom: 50px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid #eaeaea;
+}
+.code-section {
+    margin-top: 50px;
+    padding-top: 20px;
 }
 textarea {
     border-radius: 12px !important;
@@ -60,25 +70,27 @@ textarea {
     align-items: center;
     justify-content: center;
     margin: 1rem auto;
-    padding: 0.7rem 1.2rem;
-    background-color: #3182ce;
+    padding: 12px 24px;
+    background: linear-gradient(to right, #4776E6, #8E54E9);
     color: white;
     border: none;
-    border-radius: 6px;
+    border-radius: 50px;
     cursor: pointer;
-    font-size: 1rem;
-    font-weight: 500;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    transition: all 0.2s ease;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    transition: all 0.3s ease;
+    text-decoration: none;
 }
 .download-btn:hover {
-    background-color: #2b6cb0;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    transform: translateY(-1px);
+    background: linear-gradient(to right, #3A5FC4, #7B46CA);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+    transform: translateY(-2px);
 }
 .download-btn:active {
     transform: translateY(1px);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
 }
 .stExpander {
     margin-top: 2rem;
@@ -92,32 +104,35 @@ st.markdown("Design, visualize, and refine system architecture with the power of
 # Sidebar layout
 st.sidebar.header("🎨 Customize Component Colors")
 
-# Define colors and labels
-color_labels = ["Database", "API Gateway", "Services", "User", "Storage", "Messaging"]
-color_defaults = ["#F94144", "#F3722C", "#43AA8B", "#577590", "#F9C74F", "#9F86C0"]
-color_settings = {}
+# Force a proper grid layout for color components using pure HTML
+st.sidebar.markdown("""
+<style>
+.color-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, auto);
+    grid-gap: 10px;
+    margin-bottom: 15px;
+}
+.color-item {
+    width: 100%;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# Create a 2-row layout using columns
-col1, col2, col3 = st.sidebar.columns(3)
-columns = [col1, col2, col3]
+# Create empty containers for each color picker
+color_containers = []
+st.sidebar.markdown('<div class="color-grid">', unsafe_allow_html=True)
+for i in range(6):
+    st.sidebar.markdown(f'<div class="color-item" id="color-container-{i}"></div>', unsafe_allow_html=True)
+    color_containers.append(f'color-container-{i}')
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
-# First row
-for i in range(3):
-    with columns[i]:
-        color_settings[color_labels[i]] = st.color_picker(
-            color_labels[i], color_defaults[i], key=f"color_{i}"
-        )
-
-# Second row
-col4, col5, col6 = st.sidebar.columns(3)
-columns = [col4, col5, col6]
-
-# Second row
-for i in range(3, 6):
-    with columns[i-3]:
-        color_settings[color_labels[i]] = st.color_picker(
-            color_labels[i], color_defaults[i], key=f"color_{i}"
-        )
+# Now place each color picker in the correct container using st.sidebar.container
+for i, (label, default) in enumerate(zip(color_labels, color_defaults)):
+    color_settings[label] = st.sidebar.color_picker(
+        label, default, key=f"color_{i}"
+    )
 
 # Prompt templates
 st.sidebar.header("📋 Prompt Templates")
@@ -309,19 +324,23 @@ if st.session_state.diagram_generated:
         </div>
         <script src="https://cdn.jsdelivr.net/npm/mermaid@11.5.0/dist/mermaid.min.js"></script>
         <script>mermaid.initialize({{startOnLoad:true}});</script>
-        <div style="text-align: center; margin-top: 20px;">
-            <button id="download-png-btn" class="download-btn">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                Download Diagram
-            </button>
-        </div>
+    <div style="text-align: center; margin-top: 20px;">
+        <a id="download-png-btn" class="download-btn" href="#" onclick="downloadPNG(); return false;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16" style="margin-right: 8px;">
+                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+            </svg>
+            Download Diagram as PNG
+        </a>
+    </div>
     </div>
     """
     
-    components.html(mermaid_html, height=600)
+    components.html(mermaid_html, height=800, scrolling=True)
     
     # Use expander for code and explanation to save space
-    with st.expander("🧬 View Mermaid Code"):
+    st.markdown('<div class="code-section"></div>', unsafe_allow_html=True)
+    with st.expander("🧬 View & Edit Mermaid Code", expanded=False):
         edited_code = st.text_area(
             "You can refine the diagram by editing the code below:",
             value=st.session_state.mermaid_code,
