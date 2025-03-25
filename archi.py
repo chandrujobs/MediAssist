@@ -53,15 +53,6 @@ st.markdown("""
 textarea {
     border-radius: 12px !important;
 }
-.color-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    grid-gap: 10px;
-    margin-bottom: 20px;
-}
-.color-item {
-    padding: 5px;
-}
 .download-btn {
     display: inline-flex;
     align-items: center;
@@ -89,16 +80,13 @@ textarea {
     transform: translateY(1px);
     box-shadow: 0 2px 10px rgba(0,0,0,0.15);
 }
-.stExpander {
-    margin-top: 2rem;
-}
 </style>
 """, unsafe_allow_html=True)
 
 st.title("🧠 VisiFlow: Architecture Diagram Studio")
 st.markdown("Design, visualize, and refine system architecture with the power of AI-generated diagrams.")
 
-# Sidebar layout - removed color customization
+# Sidebar layout
 st.sidebar.title("VisiFlow Controls")
 
 # Prompt templates
@@ -135,7 +123,7 @@ if requirement_file:
 sidebar_generate = st.sidebar.button("✨ Generate from Requirement")
 reset = st.sidebar.button("🔄 Reset All")
 
-# Reset logic - fixed to use st.rerun()
+# Reset logic
 if reset:
     for key in list(st.session_state.keys()):
         del st.session_state[key]
@@ -219,88 +207,188 @@ if trigger:
 if st.session_state.diagram_generated:
     st.markdown("### 🖼️ Generated Architecture Diagram")
     
-    # Improved download button function that reliably works
+    # Improved download button function with better error handling
     download_js = """
     <script>
-    // Function to download SVG as PNG
-    function downloadPNG() {
-        // Get the SVG element
-        const svgElement = document.querySelector('#mermaid-diagram svg');
-        if (!svgElement) {
-            alert('No diagram found');
-            return;
-        }
-        
-        // Get SVG data
-        const svgData = new XMLSerializer().serializeToString(svgElement);
-        
-        // Create a canvas element
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        // Create an Image object
-        const img = new Image();
-        
-        // Set up the onload handler for the Image object
-        img.onload = function() {
-            // Set canvas dimensions to match the SVG
-            canvas.width = img.width;
-            canvas.height = img.height;
-            
-            // Draw white background first
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Draw the image on the canvas
-            ctx.drawImage(img, 0, 0);
-            
-            // Create a download link
-            const a = document.createElement('a');
-            a.download = 'architecture_diagram.png';
-            a.href = canvas.toDataURL('image/png');
-            
-            // Trigger a click on the link to start the download
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        };
-        
-        // Convert SVG to a data URL
-        const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
-        const url = URL.createObjectURL(svgBlob);
-        
-        // Load the SVG data into the Image object
-        img.src = url;
-    }
+    // Wait for mermaid to render before setting up the download
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            setupDownloadButton();
+        }, 1000); // Give mermaid time to render
+    });
     
-    // Add event listener after the page loads
-    window.addEventListener('load', function() {
-        // Find the download button and attach the event handler
+    function setupDownloadButton() {
         const downloadBtn = document.getElementById('download-png-btn');
         if (downloadBtn) {
             downloadBtn.addEventListener('click', downloadPNG);
         }
-    });
+    }
+    
+    // Function to create a PNG from the SVG and trigger download
+    function downloadPNG() {
+        // Change button state
+        const btn = document.getElementById('download-png-btn');
+        if (!btn) return;
+        
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<span style="display:inline-block;animation:spin 1s linear infinite;margin-right:8px;">↻</span> Processing...';
+        btn.style.pointerEvents = 'none';
+        btn.style.opacity = '0.7';
+        
+        try {
+            // Get the SVG element
+            const svg = document.querySelector('#mermaid-diagram svg');
+            if (!svg) {
+                throw new Error('No diagram found');
+            }
+            
+            // Get dimensions
+            const svgWidth = parseInt(svg.getAttribute('width') || svg.getBoundingClientRect().width);
+            const svgHeight = parseInt(svg.getAttribute('height') || svg.getBoundingClientRect().height);
+            
+            // Create a canvas with 2x resolution for better quality
+            const canvas = document.createElement('canvas');
+            const scale = 2; // Scale for higher resolution
+            canvas.width = svgWidth * scale;
+            canvas.height = svgHeight * scale;
+            
+            // Get canvas context and scale it
+            const ctx = canvas.getContext('2d');
+            ctx.scale(scale, scale);
+            
+            // Create a proper SVG blob with XML declaration and correct dimensions
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const svgBlob = new Blob([
+                '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n',
+                '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">\n',
+                svgData
+            ], {type: 'image/svg+xml'});
+            
+            const url = URL.createObjectURL(svgBlob);
+            
+            // Create image and draw to canvas when loaded
+            const img = new Image();
+            
+            img.onload = function() {
+                // Fill with white background
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw the SVG image
+                ctx.drawImage(img, 0, 0, svgWidth, svgHeight);
+                
+                // Convert to PNG
+                try {
+                    // Use toBlob for better browser compatibility
+                    canvas.toBlob(function(blob) {
+                        // Create download link
+                        const downloadUrl = URL.createObjectURL(blob);
+                        const downloadLink = document.createElement('a');
+                        downloadLink.href = downloadUrl;
+                        downloadLink.download = 'architecture_diagram.png';
+                        
+                        // Append to body, click and remove
+                        document.body.appendChild(downloadLink);
+                        downloadLink.click();
+                        document.body.removeChild(downloadLink);
+                        
+                        // Cleanup
+                        URL.revokeObjectURL(downloadUrl);
+                        URL.revokeObjectURL(url);
+                        
+                        // Restore button
+                        btn.innerHTML = originalHTML;
+                        btn.style.pointerEvents = 'auto';
+                        btn.style.opacity = '1';
+                    }, 'image/png', 1.0);
+                } catch (e) {
+                    // Fallback to older method if toBlob fails
+                    try {
+                        const dataUrl = canvas.toDataURL('image/png');
+                        const downloadLink = document.createElement('a');
+                        downloadLink.href = dataUrl;
+                        downloadLink.download = 'architecture_diagram.png';
+                        document.body.appendChild(downloadLink);
+                        downloadLink.click();
+                        document.body.removeChild(downloadLink);
+                        
+                        // Restore button
+                        btn.innerHTML = originalHTML;
+                        btn.style.pointerEvents = 'auto';
+                        btn.style.opacity = '1';
+                    } catch (err) {
+                        alert('Failed to generate PNG: ' + err.message);
+                        console.error(err);
+                        btn.innerHTML = originalHTML;
+                        btn.style.pointerEvents = 'auto';
+                        btn.style.opacity = '1';
+                    }
+                }
+            };
+            
+            img.onerror = function() {
+                alert('Failed to load the diagram image. Please try again.');
+                console.error('Image loading failed');
+                btn.innerHTML = originalHTML;
+                btn.style.pointerEvents = 'auto';
+                btn.style.opacity = '1';
+            };
+            
+            // Load the image
+            img.src = url;
+            
+        } catch (error) {
+            alert('Failed to download: ' + error.message);
+            console.error('Download failed:', error);
+            btn.innerHTML = originalHTML;
+            btn.style.pointerEvents = 'auto';
+            btn.style.opacity = '1';
+        }
+    }
+    
+    // Add spin animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
     </script>
     """
     
     mermaid_html = f"""
     {download_js}
-    <div class='mermaid-container'>
-        <div class="mermaid" id="mermaid-diagram">
-            {st.session_state.mermaid_code}
+    <div class="diagram-wrapper">
+        <div class='mermaid-container'>
+            <div class="mermaid" id="mermaid-diagram">
+                {st.session_state.mermaid_code}
+            </div>
+            <script src="https://cdn.jsdelivr.net/npm/mermaid@9.4.3/dist/mermaid.min.js"></script>
+            <script>
+                mermaid.initialize({{
+                    startOnLoad: true,
+                    theme: 'default',
+                    securityLevel: 'loose',
+                    flowchart: {{
+                        useMaxWidth: true,
+                        htmlLabels: true,
+                        curve: 'basis'
+                    }}
+                }});
+            </script>
         </div>
-        <script src="https://cdn.jsdelivr.net/npm/mermaid@11.5.0/dist/mermaid.min.js"></script>
-        <script>mermaid.initialize({{startOnLoad:true}});</script>
-    <div style="text-align: center; margin-top: 20px;">
-        <a id="download-png-btn" class="download-btn" href="#" onclick="downloadPNG(); return false;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16" style="margin-right: 8px;">
-                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-            </svg>
-            Download Diagram as PNG
-        </a>
-    </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <a id="download-png-btn" class="download-btn" href="#" onclick="downloadPNG(); return false;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16" style="margin-right: 8px;">
+                    <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                    <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                </svg>
+                Download Diagram as PNG
+            </a>
+        </div>
     </div>
     """
     
