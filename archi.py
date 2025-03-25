@@ -53,32 +53,31 @@ st.markdown("""
 textarea {
     border-radius: 12px !important;
 }
-.download-btn {
+.download-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     margin: 1rem auto;
     padding: 12px 24px;
-    background: linear-gradient(to right, #4776E6, #8E54E9);
+    background: #FF8C00; /* Orange color */
     color: white;
     border: none;
-    border-radius: 50px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 16px;
     font-weight: 600;
     letter-spacing: 0.5px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-    transition: all 0.3s ease;
-    text-decoration: none;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    transition: all 0.2s ease;
 }
-.download-btn:hover {
-    background: linear-gradient(to right, #3A5FC4, #7B46CA);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-    transform: translateY(-2px);
+.download-button:hover {
+    background: #E67E00; /* Darker orange on hover */
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transform: translateY(-1px);
 }
-.download-btn:active {
+.download-button:active {
     transform: translateY(1px);
-    box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -86,21 +85,30 @@ textarea {
 st.title("🧠 VisiFlow: Architecture Diagram Studio")
 st.markdown("Design, visualize, and refine system architecture with the power of AI-generated diagrams.")
 
-# Sidebar layout - Color customization with columns
+# Sidebar layout - Color customization with spacer technique
 st.sidebar.header("🎨 Customize Component Colors")
 
-# Use columns to create a grid layout for color pickers
-col1, col2, col3 = st.sidebar.columns(3)
+# Initialize color settings in session state if they don't exist
+if 'db_color' not in st.session_state:
+    st.session_state.db_color = "#F94144"
+if 'api_color' not in st.session_state:
+    st.session_state.api_color = "#F3722C"
+if 'svc_color' not in st.session_state:
+    st.session_state.svc_color = "#43AA8B"
+if 'user_color' not in st.session_state:
+    st.session_state.user_color = "#577590"
+if 'storage_color' not in st.session_state:
+    st.session_state.storage_color = "#F9C74F"
+if 'msg_color' not in st.session_state:
+    st.session_state.msg_color = "#9F86C0"
 
-# First row
-col1.color_picker("Database", "#F94144", key="db_color")
-col2.color_picker("API Gateway", "#F3722C", key="api_color")
-col3.color_picker("Services", "#43AA8B", key="svc_color")
-
-# Second row
-col1.color_picker("User", "#577590", key="user_color")
-col2.color_picker("Storage", "#F9C74F", key="storage_color")
-col3.color_picker("Messaging", "#9F86C0", key="msg_color")
+# Simple approach - individual color pickers with descriptive labels
+st.sidebar.color_picker("Database", st.session_state.db_color, key="db_color")
+st.sidebar.color_picker("API Gateway", st.session_state.api_color, key="api_color")
+st.sidebar.color_picker("Services", st.session_state.svc_color, key="svc_color")
+st.sidebar.color_picker("User", st.session_state.user_color, key="user_color")
+st.sidebar.color_picker("Storage", st.session_state.storage_color, key="storage_color")
+st.sidebar.color_picker("Messaging", st.session_state.msg_color, key="msg_color")
 
 # Collect color settings from session state
 color_settings = {
@@ -243,25 +251,25 @@ if st.session_state.diagram_generated:
         }, 1000); // Give mermaid time to render
     });
     
-    function setupDownloadButton() {
+    function     setupDownloadButton() {
         const downloadBtn = document.getElementById('download-png-btn');
         if (downloadBtn) {
-            downloadBtn.addEventListener('click', downloadPNG);
+            // Use addEventListener instead of inline onclick
+            downloadBtn.addEventListener('click', function() {
+                downloadPNG();
+            });
         }
     }
     
     // Function to create a PNG from the SVG and trigger download
-    function downloadPNG(event) {
-        // Prevent default anchor behavior to avoid page reload
-        event.preventDefault();
-        
+    function downloadPNG() {
         // Change button state
         const btn = document.getElementById('download-png-btn');
         if (!btn) return;
         
         const originalHTML = btn.innerHTML;
         btn.innerHTML = '<span style="display:inline-block;animation:spin 1s linear infinite;margin-right:8px;">↻</span> Processing...';
-        btn.style.pointerEvents = 'none';
+        btn.disabled = true;
         btn.style.opacity = '0.7';
         
         try {
@@ -327,7 +335,7 @@ if st.session_state.diagram_generated:
                         
                         // Restore button
                         btn.innerHTML = originalHTML;
-                        btn.style.pointerEvents = 'auto';
+                        btn.disabled = false;
                         btn.style.opacity = '1';
                     }, 'image/png', 1.0);
                 } catch (e) {
@@ -343,7 +351,7 @@ if st.session_state.diagram_generated:
                         
                         // Restore button
                         btn.innerHTML = originalHTML;
-                        btn.style.pointerEvents = 'auto';
+                        btn.disabled = false;
                         btn.style.opacity = '1';
                     } catch (err) {
                         alert('Failed to generate PNG: ' + err.message);
@@ -359,7 +367,7 @@ if st.session_state.diagram_generated:
                 alert('Failed to load the diagram image. Please try again.');
                 console.error('Image loading failed');
                 btn.innerHTML = originalHTML;
-                btn.style.pointerEvents = 'auto';
+                btn.disabled = false;
                 btn.style.opacity = '1';
             };
             
@@ -370,7 +378,7 @@ if st.session_state.diagram_generated:
             alert('Failed to download: ' + error.message);
             console.error('Download failed:', error);
             btn.innerHTML = originalHTML;
-            btn.style.pointerEvents = 'auto';
+            btn.disabled = false;
             btn.style.opacity = '1';
         }
     }
@@ -409,15 +417,15 @@ if st.session_state.diagram_generated:
             </script>
         </div>
         
-        <div style="text-align: center; margin-top: 20px;">
-            <a id="download-png-btn" class="download-btn" href="#" onclick="downloadPNG(event); return false;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16" style="margin-right: 8px;">
-                    <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                    <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-                </svg>
-                Download Diagram as PNG
-            </a>
-        </div>
+            <div style="text-align: center; margin-top: 20px;">
+                <button id="download-png-btn" class="download-button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16" style="margin-right: 8px;">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+                    </svg>
+                    Download Image
+                </button>
+            </div>
     </div>
     """
     
