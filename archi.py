@@ -22,6 +22,14 @@ if 'mermaid_code' not in st.session_state:
 if 'explanation' not in st.session_state:
     st.session_state.explanation = ""
 
+# Initialize color variables in session state to ensure persistence
+if 'color_labels' not in st.session_state:
+    st.session_state.color_labels = ["Database", "API Gateway", "Services", "User", "Storage", "Messaging"]
+if 'color_defaults' not in st.session_state:
+    st.session_state.color_defaults = ["#F94144", "#F3722C", "#43AA8B", "#577590", "#F9C74F", "#9F86C0"]
+if 'color_settings' not in st.session_state:
+    st.session_state.color_settings = {}
+
 # Streamlit page config
 st.set_page_config(
     page_title="VisiFlow - Architecture Diagram Studio",
@@ -120,19 +128,20 @@ st.sidebar.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Create empty containers for each color picker
-color_containers = []
-st.sidebar.markdown('<div class="color-grid">', unsafe_allow_html=True)
-for i in range(6):
-    st.sidebar.markdown(f'<div class="color-item" id="color-container-{i}"></div>', unsafe_allow_html=True)
-    color_containers.append(f'color-container-{i}')
-st.sidebar.markdown('</div>', unsafe_allow_html=True)
+# Use session state variables for color labels and defaults
+color_labels = st.session_state.color_labels
+color_defaults = st.session_state.color_defaults
+color_settings = {}
 
-# Now place each color picker in the correct container using st.sidebar.container
+# Simple approach - just use Streamlit's built-in layout
+# This will create a single column of color pickers
 for i, (label, default) in enumerate(zip(color_labels, color_defaults)):
     color_settings[label] = st.sidebar.color_picker(
         label, default, key=f"color_{i}"
     )
+
+# Update the color settings in session state
+st.session_state.color_settings = color_settings
 
 # Prompt templates
 st.sidebar.header("📋 Prompt Templates")
@@ -207,7 +216,7 @@ if trigger:
                 "Authorization": f"Bearer {api_key}"
             }
             
-            color_comment = "\n".join([f"Use color {color} for {label}" for label, color in color_settings.items()])
+            color_comment = "\n".join([f"Use color {color} for {label}" for label, color in st.session_state.color_settings.items()])
             full_prompt = final_prompt + "\n\n" + color_comment + "\n\nEnsure the diagram syntax is fully compatible with Mermaid version 9.4.3 (NOT 11.5.0). Use only simple flowchart format (flowchart TD or LR) to avoid syntax errors."
             
             payload = {
