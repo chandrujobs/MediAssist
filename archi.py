@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 import json
 from dotenv import load_dotenv
@@ -134,9 +135,15 @@ selected_template = st.sidebar.selectbox(
     ["-- Select a Template --"] + template_options
 )
 
+# Generate a unique key for the file uploader to force reset
+if 'file_uploader_key' not in st.session_state:
+    st.session_state['file_uploader_key'] = '0'
+    
 # Requirement upload
 st.sidebar.header("📄 Upload Requirement Document")
-requirement_file = st.sidebar.file_uploader("Upload a .txt or .docx file", type=["txt", "docx"])
+requirement_file = st.sidebar.file_uploader("Upload a .txt or .docx file", 
+                                            type=["txt", "docx"],
+                                            key=st.session_state['file_uploader_key'])
 requirement_text = ""
 if requirement_file:
     file_ext = requirement_file.name.split(".")[-1]
@@ -154,10 +161,16 @@ if requirement_file:
 sidebar_generate = st.sidebar.button("✨ Generate from Requirement")
 reset = st.sidebar.button("🔄 Reset All")
 
-# Reset logic
+# Reset logic - clear template, prompt, and file uploader too
 if reset:
+    # Clear session state
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+        
+    # Force clear file uploader by using a new key
+    st.session_state['file_uploader_key'] = str(hash(str(time.time())))
+    
+    # Rerun to take effect
     st.rerun()
 
 # Prompt area (template + text input)
