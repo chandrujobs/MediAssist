@@ -4,15 +4,16 @@ import json
 from dotenv import load_dotenv
 import streamlit as st
 import streamlit.components.v1 as components
-from PIL import Image
-from io import BytesIO
-import base64
 
 # Load environment variables
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 base_url = os.getenv("OPENAI_BASE_URL")
 model_id = os.getenv("MODEL_ID")
+
+# Define these at the top level, outside any function
+COLOR_LABELS = ["Database", "API Gateway", "Services", "User", "Storage", "Messaging"]
+COLOR_DEFAULTS = ["#F94144", "#F3722C", "#43AA8B", "#577590", "#F9C74F", "#9F86C0"]
 
 # Initialize session state for managing app state
 if 'diagram_generated' not in st.session_state:
@@ -21,12 +22,6 @@ if 'mermaid_code' not in st.session_state:
     st.session_state.mermaid_code = ""
 if 'explanation' not in st.session_state:
     st.session_state.explanation = ""
-
-# Initialize color variables in session state to ensure persistence
-if 'color_labels' not in st.session_state:
-    st.session_state.color_labels = ["Database", "API Gateway", "Services", "User", "Storage", "Messaging"]
-if 'color_defaults' not in st.session_state:
-    st.session_state.color_defaults = ["#F94144", "#F3722C", "#43AA8B", "#577590", "#F9C74F", "#9F86C0"]
 if 'color_settings' not in st.session_state:
     st.session_state.color_settings = {}
 
@@ -112,35 +107,14 @@ st.markdown("Design, visualize, and refine system architecture with the power of
 # Sidebar layout
 st.sidebar.header("🎨 Customize Component Colors")
 
-# Force a proper grid layout for color components using pure HTML
-st.sidebar.markdown("""
-<style>
-.color-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(2, auto);
-    grid-gap: 10px;
-    margin-bottom: 15px;
-}
-.color-item {
-    width: 100%;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Use session state variables for color labels and defaults
-color_labels = st.session_state.color_labels
-color_defaults = st.session_state.color_defaults
+# Store color settings in session state
 color_settings = {}
-
-# Simple approach - just use Streamlit's built-in layout
-# This will create a single column of color pickers
-for i, (label, default) in enumerate(zip(color_labels, color_defaults)):
+for i, (label, default) in enumerate(zip(COLOR_LABELS, COLOR_DEFAULTS)):
     color_settings[label] = st.sidebar.color_picker(
         label, default, key=f"color_{i}"
     )
 
-# Update the color settings in session state
+# Update session state with current color settings
 st.session_state.color_settings = color_settings
 
 # Prompt templates
@@ -216,7 +190,9 @@ if trigger:
                 "Authorization": f"Bearer {api_key}"
             }
             
-            color_comment = "\n".join([f"Use color {color} for {label}" for label, color in st.session_state.color_settings.items()])
+            # Create a full prompt combining the description and color settings
+            color_settings = st.session_state.color_settings
+            color_comment = "\n".join([f"Use color {color} for {label}" for label, color in color_settings.items()])
             full_prompt = final_prompt + "\n\n" + color_comment + "\n\nEnsure the diagram syntax is fully compatible with Mermaid version 9.4.3 (NOT 11.5.0). Use only simple flowchart format (flowchart TD or LR) to avoid syntax errors."
             
             payload = {
