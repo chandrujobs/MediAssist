@@ -56,18 +56,29 @@ textarea {
     padding: 5px;
 }
 .download-btn {
-    display: block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     margin: 1rem auto;
-    padding: 0.5rem 1rem;
-    background-color: #4CAF50;
+    padding: 0.7rem 1.2rem;
+    background-color: #3182ce;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 1rem;
+    font-weight: 500;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    transition: all 0.2s ease;
 }
 .download-btn:hover {
-    background-color: #45a049;
+    background-color: #2b6cb0;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transform: translateY(-1px);
+}
+.download-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 .stExpander {
     margin-top: 2rem;
@@ -81,20 +92,17 @@ st.markdown("Design, visualize, and refine system architecture with the power of
 # Sidebar layout
 st.sidebar.header("🎨 Customize Component Colors")
 
-# Create a 2x3 grid layout for color pickers
+# Define colors and labels
 color_labels = ["Database", "API Gateway", "Services", "User", "Storage", "Messaging"]
 color_defaults = ["#F94144", "#F3722C", "#43AA8B", "#577590", "#F9C74F", "#9F86C0"]
 color_settings = {}
 
-# Create custom grid layout
-st.sidebar.markdown('<div class="color-grid">', unsafe_allow_html=True)
+# Simple approach - just use Streamlit's built-in layout
+# This will create a single column of color pickers which is what appears in the image
 for i, (label, default) in enumerate(zip(color_labels, color_defaults)):
-    st.sidebar.markdown(f'<div class="color-item">', unsafe_allow_html=True)
     color_settings[label] = st.sidebar.color_picker(
         label, default, key=f"color_{i}"
     )
-    st.sidebar.markdown('</div>', unsafe_allow_html=True)
-st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
 # Prompt templates
 st.sidebar.header("📋 Prompt Templates")
@@ -284,7 +292,12 @@ if st.session_state.diagram_generated:
         </div>
         <script src="https://cdn.jsdelivr.net/npm/mermaid@11.5.0/dist/mermaid.min.js"></script>
         <script>mermaid.initialize({{startOnLoad:true}});</script>
-        <button id="download-png-btn" class="download-btn">📥 Download as PNG</button>
+        <div style="text-align: center; margin-top: 20px;">
+            <button id="download-png-btn" class="download-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                Download Diagram
+            </button>
+        </div>
     </div>
     """
     
